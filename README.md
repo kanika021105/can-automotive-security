@@ -74,25 +74,61 @@ This project demonstrates:
 | **OS** | Linux (Kali/Ubuntu) |
 
 ---
-## Screenshots
+##  Screenshots
 
-### Live Dashboard
-![Live Dashboard](images/dashboard.png)
+###  Live Dashboard
+*Real-time CAN traffic monitoring with live updates*
 
-### Attack Detection Alert
-![Attack Detection Alert](images/attack_alert.png)
+![Dashboard](images/dashboard.png)
 
-### Traffic Visualization
-![Traffic Visualization](images/traffic_chart.png)
+---
 
-### Terminal Dashboard
-![Terminal Dashboard](images/terminal_dashboard.png)
+###  Dashboard with Attack Detection
+*Professional dashboard showing live traffic, statistics, and attack alerts*
 
-### Multiple ECUs Running
-![Multiple ECUs](images/multiple_ecus.png)
+![Dashboard Attack](images/dashboard_attack.png)
 
-### Replay Attack in Progress
+---
+
+###  Real-time Traffic Visualization
+*Interactive chart showing CAN traffic activity over time*
+
+![Dashboard Traffic](images/dashboard_traffic.png)
+
+---
+
+###  Replay Attack in Progress
+*Capturing and replaying CAN traffic using canplayer*
+
 ![Replay Attack](images/replay_attack.png)
+
+---
+
+###  Attack Detection Alert
+*Instant alert when replay attack is detected with sequence details*
+
+![Attack Detection](images/attack_detection.png)
+
+---
+
+###  CAN Traffic Log
+*Captured CAN log file showing speed sensor messages*
+
+![CAN Log](images/can_log.png)
+
+---
+
+###  Backend Processing
+*Flask backend running with WebSocket support*
+
+![Backend](images/backend.png)
+
+---
+
+### Capture & Replay
+*Creating log file and performing replay attack*
+
+![Capture Replay](images/capture_replay.png)
 
 ##  Installation
 
