@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> CAN Bus Security Dashboard</title>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        .message-row {
+            transition: all 0.3s ease;
+        }
+        .message-row:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .attack-flash {
+            animation: flash 0.5s ease;
+        }
+        @keyframes flash {
+            0% { background-color: rgba(255,0,0,0.2); }
+            100% { background-color: transparent; }
+        }
+        .alert-card {
+            animation: slideIn 0.5s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .can-id {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #60A5FA;
+        }
+        .can-data {
+            font-family: 'Courier New', monospace;
+            color: #34D399;
+        }
+        .timestamp {
+            color: #9CA3AF;
+            font-size: 0.8rem;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-dot.online {
+            background-color: #34D399;
+            box-shadow: 0 0 10px #34D399;
+        }
+        .status-dot.offline {
+            background-color: #EF4444;
+            box-shadow: 0 0 10px #EF4444;
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1F2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4B5563;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6B7280;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <div class="container mx-auto p-6 max-w-7xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold">
+                    🚗 CAN Bus Security Dashboard
+                </h1>
+                <p class="text-gray-400 text-sm">Real-time monitoring & attack detection</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="flex items-center">
+                    <span class="status-dot online" id="statusDot"></span>
+                    <span id="statusText" class="text-sm">Online</span>
+                </span>
+                <button onclick="clearStats()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm transition">
+                    <i class="fas fa-trash"></i> Clear
+                </button>
+            </div>
+        </header>
+        
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <div class="text-gray-400 text-sm">Total Messages</div>
+                <div class="text-3xl font-bold text-blue-400" id="totalMessages">0</div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <div class="text-gray-400 text-sm">Attacks Detected</div>
+                <div class="text-3xl font-bold text-red-500" id="totalAttacks">0</div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <div class="text-gray-400 text-sm">Messages/Min</div>
+                <div class="text-3xl font-bold text-green-400" id="messagesPerMin">0</div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <div class="text-gray-400 text-sm">Status</div>
+                <div class="text-lg font-bold text-green-400" id="systemStatus">
+                    <i class="fas fa-shield-alt"></i> Protected
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chart -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="lg:col-span-2 bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <h3 class="text-sm text-gray-400 mb-4"> CAN Traffic Activity</h3>
+                <canvas id="trafficChart" height="100"></canvas>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <h3 class="text-sm text-gray-400 mb-4"> CAN IDs Detected</h3>
+                <div id="canIdList" class="space-y-2">
+                    <p class="text-gray-500 text-sm">Waiting for traffic...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts -->
+        <div class="mb-6">
+            <h3 class="text-sm text-gray-400 mb-3"> Recent Alerts</h3>
+            <div id="alertsContainer" class="space-y-2 max-h-60 overflow-y-auto">
+                <div class="text-gray-500 text-sm">No alerts detected</div>
+            </div>
+        </div>
+        
+        <!-- Live Traffic -->
+        <div class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm text-gray-400">📡 Live CAN Traffic</h3>
+                <span class="text-xs text-gray-500" id="messageCount">0 messages</span>
+            </div>
+            <div id="trafficContainer" class="space-y-1 max-h-96 overflow-y-auto font-mono text-sm">
+                <div class="text-gray-500 text-sm">Waiting for CAN traffic...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Chart instance
+        let trafficChart = null;
+        const messageHistory = [];
+        
+        // Stats tracking
+        let messageCount = 0;
+        let attackCount = 0;
+        let messageCounter = 0;
+        let lastMinuteCount = 0;
+        let minuteTimer = 0;
+        
+        // CAN ID tracking
+        const canIds = {};
+        
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('trafficChart').getContext('2d');
+            trafficChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Messages per second',
+                        data: [],
+                        borderColor: '#60A5FA',
+                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#9CA3AF' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9CA3AF' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9CA3AF' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update chart
+        function updateChart() {
+            const now = new Date();
+            const label = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+            
+            trafficChart.data.labels.push(label);
+            trafficChart.data.datasets[0].data.push(messageCounter);
+            
+            if (trafficChart.data.labels.length > 30) {
+                trafficChart.data.labels.shift();
+                trafficChart.data.datasets[0].data.shift();
+            }
+            
+            trafficChart.update();
+            messageCounter = 0;
+        }
+        
+        // Add CAN message to UI
+        function addCanMessage(data) {
+            // Update stats
+            messageCount++;
+            messageCounter++;
+            document.getElementById('totalMessages').textContent = messageCount;
+            document.getElementById('messageCount').textContent = messageCount + ' messages';
+            
+            // Track CAN IDs
+            if (!canIds[data.can_id]) {
+                canIds[data.can_id] = 0;
+            }
+            canIds[data.can_id]++;
+            updateCanIdList();
+            
+            // Add to traffic container
+            const container = document.getElementById('trafficContainer');
+            
+            // Remove "waiting" message if present
+            if (container.children.length === 1 && container.children[0].textContent.includes('Waiting')) {
+                container.innerHTML = '';
+            }
+            
+            const row = document.createElement('div');
+            row.className = 'message-row flex gap-4 items-center px-2 py-1 rounded';
+            row.innerHTML = `
+                <span class="timestamp">${data.timestamp}</span>
+                <span class="can-id">${data.can_id}</span>
+                <span class="can-data">${data.data}</span>
+                <span class="text-gray-500 text-xs">[${data.length} bytes]</span>
+            `;
+            container.prepend(row);
+            
+            // Limit messages shown
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+            
+            // Update messages per minute
+            updateMessagesPerMin();
+        }
+        
+        // Update messages per minute
+        function updateMessagesPerMin() {
+            document.getElementById('messagesPerMin').textContent = Math.round(messageCounter / 0.5);
+        }
+        
+        // Update CAN ID list
+        function updateCanIdList() {
+            const container = document.getElementById('canIdList');
+            container.innerHTML = '';
+            
+            const sorted = Object.entries(canIds).sort((a, b) => b[1] - a[1]);
+            
+            if (sorted.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm">Waiting for traffic...</p>';
+                return;
+            }
+            
+            sorted.slice(0, 5).forEach(([id, count]) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center text-sm';
+                div.innerHTML = `
+                    <span class="can-id">${id}</span>
+                    <span class="text-gray-400">${count} messages</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        // Add attack alert
+        function addAttack(data) {
+            attackCount++;
+            document.getElementById('totalAttacks').textContent = attackCount;
+            document.getElementById('systemStatus').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> Attack Detected!';
+            document.getElementById('systemStatus').className = 'text-lg font-bold text-red-500';
+            
+            const container = document.getElementById('alertsContainer');
+            
+            // Remove "no alerts" message
+            if (container.children.length === 1 && container.children[0].textContent.includes('No alerts')) {
+                container.innerHTML = '';
+            }
+            
+            const alert = document.createElement('div');
+            alert.className = 'alert-card bg-red-900/30 border border-red-700 rounded-lg p-4 flex justify-between items-center';
+            alert.innerHTML = `
+                <div>
+                    <div class="font-bold text-red-400">
+                        <i class="fas fa-skull"></i> REPLAY ATTACK DETECTED!
+                    </div>
+                    <div class="text-sm text-gray-300">
+                        CAN ID: ${data.message.can_id} | Data: ${data.message.data}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Sequence repeated ${data.repetitions} times | ${data.message.timestamp}
+                    </div>
+                </div>
+                <div class="text-2xl text-red-500">
+                    <i class="fas fa-shield"></i>
+                </div>
+            `;
+            container.prepend(alert);
+            
+            // Limit alerts
+            while (container.children.length > 20) {
+                container.removeChild(container.lastChild);
+            }
+            
+            // Reset status after 10 seconds
+            setTimeout(() => {
+                document.getElementById('systemStatus').innerHTML = '<i class="fas fa-shield-alt"></i> Protected';
+                document.getElementById('systemStatus').className = 'text-lg font-bold text-green-400';
+            }, 10000);
+        }
+        
+        // Clear stats
+        function clearStats() {
+            if (confirm('Clear all statistics?')) {
+                fetch('/api/clear')
+                    .then(response => response.json())
+                    .then(data => {
+                        messageCount = 0;
+                        attackCount = 0;
+                        document.getElementById('totalMessages').textContent = '0';
+                        document.getElementById('totalAttacks').textContent = '0';
+                        document.getElementById('messageCount').textContent = '0 messages';
+                        document.getElementById('messagesPerMin').textContent = '0';
+                        document.getElementById('trafficContainer').innerHTML = '<div class="text-gray-500 text-sm">Waiting for CAN traffic...</div>';
+                        document.getElementById('alertsContainer').innerHTML = '<div class="text-gray-500 text-sm">No alerts detected</div>';
+                        document.getElementById('canIdList').innerHTML = '<p class="text-gray-500 text-sm">Waiting for traffic...</p>';
+                        Object.keys(canIds).forEach(key => delete canIds[key]);
+                    });
+            }
+        }
+        
+        // Socket.IO event handlers
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket server');
+            document.getElementById('statusText').textContent = 'Online';
+            document.getElementById('statusDot').className = 'status-dot online';
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from WebSocket server');
+            document.getElementById('statusText').textContent = 'Offline';
+            document.getElementById('statusDot').className = 'status-dot offline';
+        });
+        
+        socket.on('can_message', (data) => {
+            addCanMessage(data);
+        });
+        
+        socket.on('attack_alert', (data) => {
+            addAttack(data);
+            // Flash the alerts container
+            document.getElementById('alertsContainer').className = 'space-y-2 max-h-60 overflow-y-auto attack-flash';
+            setTimeout(() => {
+                document.getElementById('alertsContainer').className = 'space-y-2 max-h-60 overflow-y-auto';
+            }, 500);
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            
+            // Update chart every second
+            setInterval(updateChart, 1000);
+        });
+        
+        // Load initial stats
+        fetch('/api/stats')
+            .then(response => response.json())
+            .then(data => {
+                messageCount = data.total_messages || 0;
+                document.getElementById('totalMessages').textContent = messageCount;
+                document.getElementById('totalAttacks').textContent = data.total_attacks || 0;
+            });
+    </script>
+</body>
+</html>
